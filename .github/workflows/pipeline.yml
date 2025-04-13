@@ -23,7 +23,7 @@ jobs:
       ALICLOUD_ACCESS_KEY: ${{ secrets.ALICLOUD_ACCESS_KEY }}
       ALICLOUD_SECRET_KEY: ${{ secrets.ALICLOUD_SECRET_KEY }}
       # Specify your Alibaba Cloud region if not set in provider block
-      # ALICLOUD_REGION: "cn-hangzhou" 
+      ALICLOUD_REGION: ${{ env.ALICLOUD_REGION }}
 
     steps:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
