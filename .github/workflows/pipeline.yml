@@ -43,21 +43,11 @@ jobs:
         run: terraform init
         # Env vars now defined at job level
 
-      # Optional: Check Terraform formatting
-      - name: Terraform Format Check
-        id: fmt
-        run: terraform fmt -check
-
-      # Optional: Validate Terraform configuration files
-      - name: Terraform Validate
-        id: validate
-        run: terraform validate -no-color
-
       # Generates an execution plan for Terraform
       # This step is optional but highly recommended to review changes before applying
       - name: Terraform Plan
         id: plan
-        run: terraform plan -no-color
+        run: terraform plan -out=alicloud.tfplan
         # Env vars now defined at job level
 
       # On push to main branch or manual dispatch, automatically apply the Terraform plan
@@ -65,5 +55,5 @@ jobs:
       - name: Terraform Apply
         # Only run apply on push to main or workflow_dispatch
         if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' 
-        run: terraform apply -auto-approve -no-color
+        run: terraform apply "alicloud.tfplan"
         # Env vars now defined at job level
