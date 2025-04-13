@@ -1,0 +1,74 @@
+# This is a basic workflow to help you get started with Actions
+
+name: Terraform Alicloud Deploy
+
+# Controls when the workflow will run
+on:
+  # Triggers the workflow on push events but only for the "main" branch
+  push:
+    branches: [ "main" ]
+    paths:
+      - 'alic-test-iac/**' # Only run if files in alic-test-iac change
+
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+# A workflow run is made up of one or more jobs that can run sequentially or in parallel
+jobs:
+  terraform_deploy:
+    name: 'Terraform Deploy to Alicloud'
+    runs-on: ubuntu-latest
+    # Define default working directory for steps that use terraform
+    defaults:
+      run:
+        working-directory: ./alic-test-iac
+    
+    # Define environment variables for the entire job
+    env:
+      ALICLOUD_ACCESS_KEY: ${{ secrets.ALICLOUD_ACCESS_KEY }}
+      ALICLOUD_SECRET_KEY: ${{ secrets.ALICLOUD_SECRET_KEY }}
+      # Specify your Alibaba Cloud region if not set in provider block
+      # ALICLOUD_REGION: "cn-hangzhou" 
+
+    steps:
+      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      # Installs the specific version of Terraform CLI
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.6.6 # Specify your desired Terraform version
+
+      # Initialize a new or existing Terraform working directory
+      # by creating initial files, loading any remote state, and downloading modules.
+      - name: Terraform Init
+        id: init
+        run: terraform init
+        # Env vars now defined at job level
+
+      # Optional: Check Terraform formatting
+      - name: Terraform Format Check
+        id: fmt
+        run: terraform fmt -check
+
+      # Optional: Validate Terraform configuration files
+      - name: Terraform Validate
+        id: validate
+        run: terraform validate -no-color
+
+      # Generates an execution plan for Terraform
+      # This step is optional but highly recommended to review changes before applying
+      - name: Terraform Plan
+        id: plan
+        run: terraform plan -no-color
+        # Env vars now defined at job level
+
+      # On push to main branch or manual dispatch, automatically apply the Terraform plan
+      # Use -auto-approve to skip interactive approval
+      - name: Terraform Apply
+        # Only run apply on push to main or workflow_dispatch
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' 
+        run: terraform apply -auto-approve -no-color
+        # Env vars now defined at job level

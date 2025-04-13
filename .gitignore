@@ -1,0 +1,51 @@
+# 本地 Terraform 目录
+.terraform/
+
+# 状态文件和备份
+*.tfstate
+*.tfstate.*
+
+# 计划文件（包含敏感信息，不应提交）
+*.tfplan
+*.tfplan.json
+
+# 崩溃日志
+crash.log
+crash.*.log
+
+# Terraform 变量文件（可能包含敏感信息）
+*.tfvars
+*.tfvars.json
+
+# Terraform 覆盖文件
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Terraform 本地配置文件
+.terraformrc
+terraform.rc
+
+# Terraform Provider 插件目录 (以防万一)
+.terraform.d/
+terraform.d/
+
+# 编辑器目录和文件
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# 本地环境文件
+.env
+.env.local
+.env.*.local
+
+# 操作系统文件
+.DS_Store
+Thumbs.db
+
+# 锁定文件 (.terraform.lock.hcl) 通常应该提交，除非有特殊原因
+.terraform.lock.hcl
