@@ -25,6 +25,16 @@ jobs:
       # Specify your Alibaba Cloud region if not set in provider block
       ALICLOUD_REGION: "${{ vars.ALICLOUD_REGION }}"
 
+      # --- 新增：Terraform 输入变量 ---
+      # 从 Variables 获取资源前缀
+      TF_VAR_resource_prefix: ${{ vars.TF_VAR_resource_prefix }} # 例如: sintan1071-test
+
+      # 从 Secrets 获取密码
+      TF_VAR_rds_password: ${{ secrets.TF_VAR_rds_password }}
+      TF_VAR_k8s_node_password: ${{ secrets.TF_VAR_k8s_node_password }}
+      TF_VAR_redis_password: ${{ secrets.TF_VAR_redis_password }}
+      # --- 环境变量添加结束 ---
+
     steps:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - name: Checkout Repository
@@ -55,5 +65,5 @@ jobs:
       - name: Terraform Apply
         # Only run apply on push to main or workflow_dispatch
         if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' 
-        run: terraform apply "alicloud.tfplan"
+        run: terraform apply -auto-approve "alicloud.tfplan"
         # Env vars now defined at job level

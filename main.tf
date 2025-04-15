@@ -1,13 +1,63 @@
 provider "alicloud" {}
 
-# 默认资源名称
-variable "name" {
-  default = "sintan1071-test"
+# --- 新增：定义密码变量 ---
+variable "rds_password" {
+  description = "Password for the RDS database account."
+  type        = string
+  sensitive   = true
+  # 不设置 default，强制从环境变量读取
 }
-# 日志服务项目名称
+
+variable "k8s_node_password" {
+  description = "Password for logging into Kubernetes worker nodes via SSH."
+  type        = string
+  sensitive   = true
+  # 不设置 default，强制从环境变量读取
+}
+
+variable "redis_password" {
+  description = "Password for the Redis instance."
+  type        = string
+  sensitive   = true
+  # 不设置 default，强制从环境变量读取
+}
+# --- 变量定义结束 ---
+
+# --- 新增：核心命名变量 ---
+variable "resource_prefix" {
+  description = "Prefix for naming resources (e.g., 'sintan1071-test')."
+  type        = string
+  # No default, must be provided via environment variable TF_VAR_resource_prefix
+}
+# --- 核心命名变量结束 ---
+
+# 保留 log_project_name 作为可选覆盖
 variable "log_project_name" {
-  default = "sintan1071-test-ack-sls-demo"
+  description = "Optional: Specific name for the SLS project. Defaults to '<resource_prefix>-ack-sls-demo'."
+  type        = string
+  default     = ""
 }
+
+# --- 更新 Locals 以使用 resource_prefix ---
+locals {
+  # 主要名称直接使用前缀
+  derived_name = var.resource_prefix
+
+  # 派生日志项目名称，除非被显式覆盖
+  derived_log_project_name = var.log_project_name == "" ? "${local.derived_name}-ack-sls" : var.log_project_name
+
+  # 派生数据库相关名称 (注意：这里可能需要调整，看是否还想包含下划线)
+  rds_account_name     = "${replace(local.derived_name, "-", "_")}_db_account"
+  rds_connection_prefix = "${replace(local.derived_name, "_", "-")}-db-conn"
+  rds_database_name    = "${replace(local.derived_name, "-", "_")}_db"
+  redis_instance_name = "${replace(local.derived_name, "-", "_")}_redis"
+  vpc_name              = "${replace(local.derived_name, "-", "_")}_vpc"
+  vswitch_name          = "${replace(local.derived_name, "-", "_")}_vswitch"
+  k8s_name_prefix       = "${replace(local.derived_name, "-", "_")}_k8s_ack"
+  node_pool_name        = "${replace(local.derived_name, "-", "_")}_node_pool"
+}
+# --- Locals 结束 ---
+
 # 可用区
 data "alicloud_zones" "default" {
   available_resource_creation = "VSwitch"
@@ -21,12 +71,12 @@ data "alicloud_instance_types" "default" {
 }
 # 专有网络
 resource "alicloud_vpc" "default" {
-  vpc_name   = var.name
+  vpc_name   = local.vpc_name
   cidr_block = "10.1.0.0/21"
 }
 # 交换机
 resource "alicloud_vswitch" "default" {
-  vswitch_name = var.name
+  vswitch_name = local.vswitch_name
   vpc_id       = alicloud_vpc.default.id
   cidr_block   = "10.1.1.0/24"
   zone_id      = data.alicloud_zones.default.zones[0].id
@@ -44,20 +94,20 @@ resource "alicloud_db_instance" "instance" {
 
 resource "alicloud_rds_account" "account" {
   db_instance_id   = alicloud_db_instance.instance.id
-  account_name     = "sintan1071_db_account"
-  account_password = "!1QqAaZz111"
+  account_name     = local.rds_account_name
+  account_password = var.rds_password
 }
 
 # 不创建也没关系，本质上RDS会创建默认的链接，
 #只是如果用terraform下游还有资源需要引用这个链接的话，则需要创建方便引用
 resource "alicloud_db_connection" "connection" {
   instance_id       = alicloud_db_instance.instance.id
-  connection_prefix = "sintan1071-db-conn"
+  connection_prefix = local.rds_connection_prefix
 }
 
 resource "alicloud_db_database" "db" {
   instance_id = alicloud_db_instance.instance.id
-  name        = "sintan1071_db"
+  name        = local.rds_database_name
 
   # 加强显式依赖，确保实例和账户也已创建
   depends_on = [
@@ -68,9 +118,9 @@ resource "alicloud_db_database" "db" {
 
 resource "alicloud_db_account_privilege" "privilege" {
   instance_id  = alicloud_db_instance.instance.id
-  account_name = alicloud_rds_account.account.account_name
+  account_name = local.rds_account_name
   privilege    = "DBOwner" # 其他类型：ReadOnly
-  db_names     = [alicloud_db_database.db.name]
+  db_names     = [local.rds_database_name]
 
   # 加强显式依赖，确保实例和账户也已创建
   depends_on = [
@@ -84,7 +134,7 @@ resource "alicloud_db_account_privilege" "privilege" {
 resource "alicloud_cs_managed_kubernetes" "default" {
   worker_vswitch_ids = [alicloud_vswitch.default.id]
   # kubernetes集群名称的前缀。与name冲突。如果指定，terraform将使用它来构建唯一的集群名称。默认为" Terraform-Creation"。
-  name_prefix = var.name
+  name_prefix = local.k8s_name_prefix
   # 是否在创建kubernetes集群时创建新的nat网关。默认为true。
   new_nat_gateway = true
   # pod网络的CIDR块。当cluster_network_type设置为flannel，你必须设定该参数。它不能与VPC CIDR相同，并且不能与VPC中的Kubernetes集群使用的CIDR相同，也不能在创建后进行修改。集群中允许的最大主机数量：256。
@@ -96,11 +146,11 @@ resource "alicloud_cs_managed_kubernetes" "default" {
 }
 
 resource "alicloud_cs_kubernetes_node_pool" "default" {
-  node_pool_name         = var.name
+  node_pool_name         = local.node_pool_name
   cluster_id   = alicloud_cs_managed_kubernetes.default.id
   vswitch_ids  = [alicloud_vswitch.default.id]
   # ssh登录集群节点的密码。您必须指定password或key_name kms_encrypted_password字段。
-  password = "!1QqAaZz111"
+  password = var.k8s_node_password
   # kubernetes集群的总工作节点数。
   desired_size = 2
   # 是否为kubernetes的节点安装云监控。
@@ -120,7 +170,7 @@ resource "alicloud_cs_kubernetes_node_pool" "default" {
 # Redis 实例配置
 resource "alicloud_kvstore_instance" "redis_instance" {
   # 实例名称，使用变量 "name" 加上后缀 "-redis"
-  instance_name     = "${var.name}-redis"
+  instance_name     = local.redis_instance_name
   
   # 实例类型，指定为 Redis
   instance_type     = "Redis"
@@ -144,7 +194,7 @@ resource "alicloud_kvstore_instance" "redis_instance" {
   
   # 安全设置：访问 Redis 实例的密码
   # 警告：请务必替换为强密码，并考虑使用密钥管理服务
-  password          = "!1QqAaZz111" 
+  password          = var.redis_password
   
   # 安全设置：允许访问 Redis 实例的 IP 地址列表或 CIDR 段
   # 这里设置为允许 VPC 内所有 IP 访问，可根据需要收紧
@@ -160,4 +210,48 @@ output "redis_connection_address" {
 output "redis_port" {
   description = "Redis 实例的连接端口"
   value       = alicloud_kvstore_instance.redis_instance.port
+}
+
+# RDS 实例信息
+output "rds_connection_string" {
+  description = "RDS 实例的内网连接地址"
+  value       = "${replace(alicloud_db_connection.connection.connection_string,alicloud_db_connection.connection.connection_prefix, alicloud_db_connection.connection.instance_id)}:${alicloud_db_instance.instance.port}"
+}
+
+output "rds_connection_string_internet" {
+  description = "RDS 实例的外网连接地址"
+  value       = "${alicloud_db_connection.connection.connection_string}:${alicloud_db_connection.connection.port}"
+}
+
+output "rds_database_name" {
+  description = "RDS 数据库名称"
+  value       = alicloud_db_database.db.name
+}
+
+# ACK 集群信息
+output "ack_cluster_id" {
+  description = "ACK 集群 ID"
+  value       = alicloud_cs_managed_kubernetes.default.id
+}
+
+output "ack_cluster_endpoint" {
+  description = "ACK 集群 API Server 端点"
+  value       = alicloud_cs_managed_kubernetes.default.connections.api_server_internet
+}
+
+# VPC 网络信息
+output "vpc_id" {
+  description = "VPC ID"
+  value       = alicloud_vpc.default.id
+}
+
+output "vswitch_id" {
+  description = "VSwitch ID"
+  value       = alicloud_vswitch.default.id
+}
+
+# 节点池信息
+output "node_pool_instance_types" {
+  description = "节点池使用的实例类型"
+  value       = alicloud_cs_kubernetes_node_pool.default.instance_types
 }
